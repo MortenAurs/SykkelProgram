@@ -23,6 +23,7 @@ def registrere_sykkel():
         stativid.set('')
         lasnr.set('')
         startdato.set('')
+        status.set('')
 
         # Legger inndataverdiene inn i lokale variabler
         ssykkelid = sykkelid.get()
@@ -37,7 +38,7 @@ def registrere_sykkel():
             if ssykkelid == r[0]:
                 # Dersom StativID har verdien null betyr det at sykkelen er utlånt
                 if r[2] is None:
-                    stativid.set('Utlånt')
+                    status.set('Sykkel er på utlån')
                     lasnr.set('')
                 # Dersom StativID ikke har verdien null vises StativID og Låsnr i inndatafeltene
                 else:
@@ -197,7 +198,7 @@ def registrere_sykkel():
     stativid = StringVar()
     lbl_stativID = Label(registrering_vindu, font=courier, text='StativID:')
     lbl_stativID.grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky=W)
-    ent_stativID = Entry(registrering_vindu, width=7, font=courier, textvariable=stativid, justify='center')
+    ent_stativID = Entry(registrering_vindu, width=5, font=courier, textvariable=stativid, justify='center')
     ent_stativID.grid(row=6, column=1, columnspan=3, padx=5, pady=5, sticky=W)
 
     # Oppretter Label og Entry for Låsnr
@@ -317,28 +318,43 @@ def registrere_stativ():
     def finne_sted():
         # Setter inndatafeltene til tomt slik at de fjernes
         # dersom bruker søker på noe som ikke finnes
-        stedg.set('')
-        status.set('')
         try:
+            stedg.set('')
+            status.set('')
+            
             # Legger verdier fra inndatafeltene inn i lokale variabler
             stativ = int(stativ_ID.get())
             
             # Åpner markør og kobler mot Sykkelstativ-tabell i databasen
             sok_markor = mindatabase.cursor()
-            sok_stativid=("SELECT Sted FROM Sykkelstativ WHERE StativID = %s")
-            stativID_var=(stativ)
+            sok_markor.execute("SELECT * FROM Sykkelstativ")
 
-            sok_markor.execute(sok_stativid,stativID_var)
-
-            # Setter aktuelt sted inn i lokal variabel
-            for rad in sok_markor:
-                sted = rad[0]
-
-            # Legger sted inn i inndatafeltet    
-            stedg.set(sted)
-
+            # Sjekker at StativID finnes
+            stativid_finnes = False
+            for r in sok_markor:
+                if stativ == int(r[0]):
+                    stativid_finnes = True
+                    
             # Lukker markør
-            sok_markor.close() 
+            sok_markor.close()
+
+            if stativid_finnes:
+                # Åpner ny markør og kobler mot database
+                sok_markor = mindatabase.cursor()
+                sok_stativid=("SELECT * FROM Sykkelstativ WHERE StativID = %s")
+                stativID_var=(stativ)
+                sok_markor.execute(sok_stativid,stativID_var)
+                
+                # Setter aktuelt sted inn i lokal variabel
+                for rad in sok_markor:
+                    sted = rad[1]
+
+                # Legger sted inn i inndatafeltet    
+                stedg.set(sted)
+                # Lukker markør
+                sok_markor.close() 
+            else:
+                status.set('StativID finnes ikke')
 
         # Skriver feilmelding dersom verdi på inndata er ugyldige
         except:
@@ -444,7 +460,8 @@ def registrere_las():
                         r = None
                     else:
                         r = stativ_markor.fetchone()
-
+                        
+                # Lukker markør
                 stativ_markor.close()
 
                 # Legger inn en try for å sjekke at inndata på LåsNr er gyldig
@@ -475,7 +492,7 @@ def registrere_las():
                                 lasenr_markor = mindatabase.cursor()
                                 lasenr_registrer = ("INSERT INTO Lås"
                                                 "(StativID, Låsnr)"
-                                                "VALUES(%s, %s);")
+                                                "VALUES(%s, %s)")
                                 lasenr_var = (sstativid, slasnr)
                                 lasenr_markor.execute(lasenr_registrer, lasenr_var)
                                 mindatabase.commit()
@@ -607,7 +624,11 @@ def flytte_sykkel():
                         
                         # Oppretter ny markør for å oppdatere listen i vinduet
                         markor = mindatabase.cursor()
-                        markor.execute("SELECT SykkelID FROM Sykkel WHERE StativID IS NULL AND SykkelID NOT IN (SELECT SykkelID FROM Utleie WHERE Innlevert IS NULL)")
+                        markor.execute("SELECT SykkelID \
+                                        FROM Sykkel \
+                                        WHERE StativID IS NULL \
+                                            AND SykkelID NOT IN \
+                                                    (SELECT SykkelID FROM Utleie WHERE Innlevert IS NULL)")
                             
                         utlost_liste = []
 
@@ -709,7 +730,11 @@ def flytte_sykkel():
                             sykkelid.set('')
                             
                             # Oppretter ny markør for å oppdatere listen i vinduet
-                            markor.execute("SELECT SykkelID FROM Sykkel WHERE StativID IS NULL AND SykkelID NOT IN (SELECT SykkelID FROM Utleie WHERE Innlevert IS NULL)")
+                            markor.execute("SELECT SykkelID \
+                                            FROM Sykkel \
+                                            WHERE StativID IS NULL \
+                                                AND SykkelID NOT IN \
+                                                                (SELECT SykkelID FROM Utleie WHERE Innlevert IS NULL)")
                             
                             utlost_liste = []
 
@@ -757,7 +782,10 @@ def flytte_sykkel():
 
     # Henter info om alle sykler som er løst ut og legger inn i liste
     markor = mindatabase.cursor()
-    markor.execute("SELECT SykkelID FROM Sykkel WHERE StativID IS NULL AND SykkelID NOT IN (SELECT SykkelID FROM Utleie WHERE Innlevert IS NULL)")
+    markor.execute("SELECT SykkelID FROM Sykkel \
+                    WHERE StativID IS NULL \
+                        AND SykkelID NOT IN \
+                                        (SELECT SykkelID FROM Utleie WHERE Innlevert IS NULL)")
         
     utlost_liste = []
 
@@ -919,26 +947,31 @@ def slette_stativ():
     stativ_liste.set(tuple(liste))
     y_scroll_overskrift['command'] = lst_slette_stativ.yview
     lst_slette_stativ.bind('<<ListboxSelect>>', hent_sykkelid)
-    
+
+    # Oppretter labels og entry for StativID
     stativid = StringVar()
     lbl_stativid = Label(slette_stativ_vindu, font=courier, text='StativID:')
     lbl_stativid.grid(row=2, column=2, padx=10, sticky=W)
     ent_stativid = Entry(slette_stativ_vindu, width=4, font=courier, justify='center', textvariable=stativid)
     ent_stativid.grid(row=2, column=3, padx=10, pady=5, sticky=W)
 
+    # Oppretter knapp for sletting
     btn_slett = Button(slette_stativ_vindu, font=courier, width=10, text='Slett', command=slett)
     btn_slett.grid(row=3, column=2, columnspan=3, padx=10, pady=10)
 
+    # Oppretter label og entry for Statusfelt
     status = StringVar()
     lbl_status = Label(slette_stativ_vindu,font=courier, text='Status:')
     lbl_status.grid(row=4, column=2, columnspan=3, padx=10)
     ent_status = Entry(slette_stativ_vindu, width=30, state='readonly', font=courier, textvariable=status, justify='center')
     ent_status.grid(row=5, column=2, columnspan=3, padx=10)
 
+    # Oppretter avsluttknapp
     btn_avslutt = Button(slette_stativ_vindu, font=courier, width=10, text='Tilbake', command=slette_stativ_vindu.destroy)
     btn_avslutt.grid(row=6, column=4, padx=5, pady=5, sticky=E)
     
 def slette_las():
+    # Oppretter funksjon å kunne hente verdi fra listeboksen
     def hent_stativid(event):
         try:
             sstativid = lst_slette_las.get(lst_slette_las.curselection())
@@ -993,6 +1026,7 @@ def slette_las():
                                 if slasnr == r[1]:
                                     lasenr_finnes = True
                                     
+                            # Lukker markør        
                             lasenr_markor.close()
 
                             # Dersom låsenr allerede finnes sjekker man om sykkelen for tiden er på utlån
@@ -1025,6 +1059,7 @@ def slette_las():
                                     settinn_nymarkor.execute("SELECT * FROM Lås ORDER BY StativID, Låsnr + 0")
 
                                     liste = []
+                                    # Legger data inn i liste
                                     for r in settinn_nymarkor:
                                         if len(r[1]) == 1:
                                             mellomrom = ' '*5
@@ -1054,10 +1089,12 @@ def slette_las():
     slette_las_vindu = Toplevel()
     slette_las_vindu.title('Slette lås')
 
+    # Oppretter markør og kobler mot database
     settinn_nymarkor = mindatabase.cursor()
     settinn_nymarkor.execute("SELECT * FROM Lås ORDER BY StativID, Låsnr + 0")
 
     liste = []
+    # Henter informasjon fra database og legger inn i liste
     for r in settinn_nymarkor:
         if len(r[1]) == 1:
             mellomrom = ' '*5
@@ -1073,18 +1110,19 @@ def slette_las():
     lbl_overskrift = Label(slette_las_vindu, font=bold, text='Slette lås')
     lbl_overskrift.grid(row=0, column=0, columnspan=4, padx=10, pady=(0,5))
 
-    
-
+    # Lager label for informasjonstekst
     lbl_tekst = Label(slette_las_vindu, font=courier, text='Skriv inn StativID og Låsnr')
     lbl_tekst.grid(row=1, column=2, columnspan=2)
     lbl_tekst = Label(slette_las_vindu, font=courier, text='eller velg fra listen')
     lbl_tekst.grid(row=2, column=2, columnspan=2)
 
+    # Lager label for StativID og LåsNr
     lbl_sykkelid = Label(slette_las_vindu, font=courier, text='StativID:')
     lbl_sykkelid.grid(row=1, rowspan=2, column=0, padx=(5,50), sticky=S)
     lbl_utlan = Label(slette_las_vindu, font=courier, text='Låsnr:')
     lbl_utlan.grid(row=1, rowspan=2, column=0, padx=(0,0), sticky=(E,S))
 
+    # Oppretter y-scroll
     y_scroll_overskrift = Scrollbar(slette_las_vindu, orient=VERTICAL)
     y_scroll_overskrift.grid(row=3,column=1,rowspan=5, padx=(0,10), pady=5,sticky=(NS, W))
 
@@ -1129,7 +1167,10 @@ def slette_las():
 def oversikt_alle_kunder():
     # Åpner markør for henting av data fra database
     oversikt_markor = mindatabase.cursor()
-    oversikt_markor.execute("SELECT Etternavn, Fornavn, Kunde.Mobilnr, COUNT(Utleie.Mobilnr) AS Antall FROM Kunde LEFT JOIN Utleie ON Kunde.Mobilnr = Utleie.Mobilnr GROUP BY Fornavn, Etternavn, Kunde.Mobilnr;")
+    oversikt_markor.execute("SELECT Etternavn, Fornavn, Kunde.Mobilnr, COUNT(Utleie.Mobilnr) AS Antall \
+                            FROM Kunde LEFT JOIN Utleie \
+                                ON Kunde.Mobilnr = Utleie.Mobilnr \
+                            GROUP BY Fornavn, Etternavn, Kunde.Mobilnr")
 
     # Lager liste for sortering av etternavn og setter antall-variabel til 0
     sorteringsliste = []
@@ -1215,7 +1256,10 @@ def oversikt_alle_kunder():
 def oversikt_totalbelop():
     # Åpner markør for henting av data fra database
     totalbelop_markor = mindatabase.cursor()
-    totalbelop_markor.execute("SELECT Fornavn, Etternavn, Kunde.Mobilnr, SUM(Beløp) AS Totalbeløp FROM Kunde LEFT JOIN Utleie ON Kunde.Mobilnr = Utleie.Mobilnr GROUP BY Mobilnr, Etternavn, Fornavn")
+    totalbelop_markor.execute("SELECT Fornavn, Etternavn, Kunde.Mobilnr, SUM(Beløp) AS Totalbeløp \
+                                FROM Kunde LEFT JOIN Utleie \
+                                    ON Kunde.Mobilnr = Utleie.Mobilnr \
+                                GROUP BY Mobilnr, Etternavn, Fornavn")
 
     # Lager variabel for å finne totalsum brukt av alle brukere
     totalbelop = 0
@@ -1230,7 +1274,7 @@ def oversikt_totalbelop():
             total = 0
         totalbelop += total
         
-        sorteringsliste += [[r[0], r[1], r[2], str(total)]]
+        sorteringsliste += [[r[0], r[1], r[2], float(total)]]
 
     totalbelop_markor.close()
     
@@ -1258,7 +1302,7 @@ def oversikt_totalbelop():
         total_liste += [sorteringsliste[r][0] + mellomrom_fornavn + \
                              sorteringsliste[r][1] + mellomrom_etternavn + \
                              sorteringsliste[r][2] + mellomrom_mobilnr + \
-                             sorteringsliste[r][3]]
+                             str(format(sorteringsliste[r][3], '.2f'))]
 
     # Oppretter vindu
     totalbelop_vindu = Toplevel()
@@ -1268,6 +1312,7 @@ def oversikt_totalbelop():
     bold = font.Font(size=15, family='Courier New', weight="bold")
     courier = font.Font(size=9, family='Courier New')
 
+    # Lager labels for listeboks
     lbl_oversikt_totalbelop = Label(totalbelop_vindu, font=bold, text='Alle kunder med totalbeløp')
     lbl_oversikt_totalbelop.grid(row=0, column=0, columnspan=4, padx=10, pady=(0,5))
     lbl_fornavn = Label(totalbelop_vindu, font=courier, text='Fornavn:')
@@ -1291,6 +1336,7 @@ def oversikt_totalbelop():
     total.set(tuple(total_liste))
     y_scroll_overskrift['command'] = lst_total.yview
 
+    # Lager label for totalbeløp alle kunder
     lbl_totalbelop = Label(totalbelop_vindu, font=courier, text='Totalbeløp alle kunder:')
     lbl_totalbelop.grid(row=4, column=0, columnspan=2)
     lbl_totalsum = Label(totalbelop_vindu, font=courier, text=totalbelop)
@@ -1301,19 +1347,26 @@ def oversikt_totalbelop():
     btn_avslutt.grid(row=6, column=1, columnspan=2, padx=5, pady=(0,5), sticky=(S,E))
 
 def aldri_leid_sykkel():
+    # Oppretter markør og kobler mot database
     settinn_markor = mindatabase.cursor()
-    settinn_markor.execute("SELECT Etternavn, Fornavn, Kunde.Mobilnr FROM Kunde LEFT JOIN Utleie ON Kunde.Mobilnr = Utleie.Mobilnr WHERE Kunde.Mobilnr NOT IN (SELECT Mobilnr FROM Utleie) GROUP BY Etternavn, Fornavn, Kunde.Mobilnr;")
+    settinn_markor.execute("SELECT Etternavn, Fornavn, Kunde.Mobilnr \
+                            FROM Kunde LEFT JOIN Utleie \
+                                ON Kunde.Mobilnr = Utleie.Mobilnr \
+                            WHERE Kunde.Mobilnr NOT IN \
+                                                (SELECT Mobilnr FROM Utleie) \
+                                                GROUP BY Etternavn, Fornavn, Kunde.Mobilnr")
 
+    # Legger data inn i liste og legger til mellomrom for å gjøre det oversiktlig og fint
     ny_liste = []
     antall = 0
-
     for r in settinn_markor:
         antall += 1
         mellomrom = ' '
         mellomrom_etternavn = 20-len(r[0])
         mellomrom_fornavn = 15-len(r[1])
         ny_liste += [r[0] + mellomrom_etternavn*mellomrom + r[1] + mellomrom_fornavn*mellomrom + r[2]]
-        
+
+    # Oppretter vindu  
     oversikt_alle_kunder = Toplevel()
     oversikt_alle_kunder.title('Kunder som aldri har leid sykkel')
 
@@ -1354,9 +1407,12 @@ def aldri_leid_sykkel():
     btn_avslutt.grid(row=6, column=1, columnspan=2, padx=5, pady=5, sticky=E)
 
 def sykler_over_hundre():
+    # Oppretter markør og kobler mot database
     over_hundre_markor = mindatabase.cursor()
-    over_hundre_markor.execute("SELECT SykkelID, COUNT(*) AS AntallUtleier FROM Utleie GROUP BY SykkelID;")
-    
+    over_hundre_markor.execute("SELECT SykkelID, COUNT(*) AS AntallUtleier \
+                                FROM Utleie GROUP BY SykkelID")
+
+    # Legger data inn i sorteringsliste for å kunne sortere etter antall utleie
     sorteringsliste = []
     antall = 0
     for r in over_hundre_markor:
@@ -1365,6 +1421,7 @@ def sykler_over_hundre():
             sorteringsliste += [[r[0], str(r[1])]]
     tabellengde = len(sorteringsliste)
 
+    # Boblesorterer for å sortere etter antall utleie
     bytte = True
     while bytte:
         bytte = False
@@ -1425,48 +1482,50 @@ def sykler_over_hundre():
     btn_avslutt.grid(row=6, column=1,columnspan=2, padx=5, pady=5, sticky=E)
 
 def oversikt_sykler_dato():
+    # Oppretter søkefunksjon
     def lag_liste():
+        # Henter variabler
         dato=dato_inn.get()
 
+        # Sjekker at inndata er gyldig
         if len(dato) == 8:
             dato_markor = mindatabase.cursor()
-            
+
+            # Oppretter markør og kobler mot database 
             sykkel_sok=("SELECT * FROM Sykkel WHERE Startdato >= %s")
             sok_objekt=(dato)
-
             dato_markor.execute(sykkel_sok,sok_objekt)
 
-            temp_liste = []
+            # Henter data fra database og legger inn i liste
+            dato_liste = []
             for r in dato_markor:
+                # Oppretter variabler for å sette NULL-verdier til 'Utleid'
                 null1 = r[2]
                 null2 = r[3]
-
                 if r[2] == None and r[3] == None:
                     null1 = 'Utleid'
                     null2 = 'Utleid'
-
-                temp_liste += [[r[0], str(r[1]), str(null1), str(null2)]]
-
-            dato_liste = []
-
-            for r in temp_liste:
+                # Legger inn i liste
                 mellomrom = ' '
                 sykkelid = 3
                 startdato = 7
                 stativid = 7
-                lasnr = 13-len(r[2])
+                lasnr = 13-len(null1)
                 
                 dato_liste += [sykkelid*mellomrom + r[0] + \
                                startdato*mellomrom + str(r[1]) + \
-                               stativid*mellomrom + r[2] + \
-                               lasnr*mellomrom + r[3]]
-            
+                               stativid*mellomrom + null1 + \
+                               lasnr*mellomrom + null2]
+
+            # Viser liste    
             sykkler_dato.set(tuple(dato_liste))
             status.set('')
+            # Lukker markør
             dato_markor.close()
         else:
             status.set('Ugyldig dato')
-        
+
+    # Oppretter vindu    
     oversikt_sykkler_dato = Toplevel()
     oversikt_sykkler_dato.title('Sykler etter dato')
 
@@ -1477,7 +1536,8 @@ def oversikt_sykler_dato():
     #Label
     lbl_overskrift = Label(oversikt_sykkler_dato, font=bold, text='Sykler etter dato')
     lbl_overskrift.grid(row=0, column=0, columnspan=5, pady=(0,5))
-    
+
+    # Oppretter label og entry for dato
     dato_inn=StringVar()
     lbl_dato = Label(oversikt_sykkler_dato, font=courier, text='Dato:')
     lbl_dato.grid(row=1, column=1, padx=(0,40), sticky=E)
@@ -1488,9 +1548,11 @@ def oversikt_sykler_dato():
     btn_sok = Button(oversikt_sykkler_dato, width=5, font=courier, text='Søk', command=lag_liste)
     btn_sok.grid(row=1, column=1, columnspan=2, padx=(0,15), sticky=E)
 
+    # Lager label for informasjon om dato
     lbl_informasjon = Label(oversikt_sykkler_dato, font=courier, text='år-mnd-dag')
     lbl_informasjon.grid(row=2, column=1, columnspan=2, padx=(0,0))
 
+    # Lager labels for listebokskolonnene
     lbl_sykkelid = Label(oversikt_sykkler_dato, font=courier, text='SykkelID:')
     lbl_sykkelid.grid(row=4, column=0, padx=(12,0))
     lbl_startdato = Label(oversikt_sykkler_dato, font=courier, text='Startdato:')
@@ -1508,30 +1570,29 @@ def oversikt_sykler_dato():
     markor = mindatabase.cursor()
     markor.execute("SELECT * FROM Sykkel")
 
-    temp_liste = []
+    # Henter data fra database og legger inn i liste
+    full_liste = []
     for r in markor:
+        # Oppretter variabler for å sette NULL-verdier til 'Utleid'
         null1 = r[2]
         null2 = r[3]
-
         if r[2] == None and r[3] == None:
             null1 = 'Utleid'
             null2 = 'Utleid'
-
-        temp_liste += [[r[0], str(r[1]), str(null1), str(null2)]]
-
-    full_liste = []
-
-    for r in temp_liste:
+        # Legger inn i liste
         mellomrom = ' '
         sykkelid = 3
         startdato = 7
         stativid = 7
-        lasnr = 13-len(r[2])
+        lasnr = 13-len(null1)
         
         full_liste += [sykkelid*mellomrom + r[0] + \
                        startdato*mellomrom + str(r[1]) + \
-                       stativid*mellomrom + r[2] + \
-                       lasnr*mellomrom + r[3]]
+                       stativid*mellomrom + null1 + \
+                       lasnr*mellomrom + null2]
+    # Lukker markør
+    markor.close()
+    
     #Liste
     sykkler_dato=StringVar()
     lst_sykkler_dato = Listbox(oversikt_sykkler_dato, font=courier, width=50, listvariable=sykkler_dato, yscrollcommand=y_scroll.set)
@@ -1553,11 +1614,15 @@ def oversikt_sykler_dato():
 def ledige_sykler():
     # Åpner markør for henting av data fra database
     oversikt_markor = mindatabase.cursor()
-    oversikt_markor.execute("SELECT SykkelStativ.StativID, SykkelStativ.Sted, COUNT(Sykkel.StativID) AS AntallLedigeSykler FROM SykkelStativ LEFT JOIN Sykkel ON SykkelStativ.StativID=Sykkel.StativID GROUP BY SykkelStativ.StativID;")
+    oversikt_markor.execute("SELECT SykkelStativ.StativID, SykkelStativ.Sted, COUNT(Sykkel.StativID) AS AntallLedigeSykler \
+                            FROM SykkelStativ LEFT JOIN Sykkel \
+                                ON SykkelStativ.StativID=Sykkel.StativID \
+                            GROUP BY SykkelStativ.StativID")
 
     # Oppretter liste for å bruke i listbox
     ledige_sykler_liste = []
 
+    # Legger data inn i liste
     for r in oversikt_markor:
         mellomrom = ' '
         mellomrom_StativID = 8
@@ -1592,6 +1657,7 @@ def ledige_sykler():
     ledige_sykler = StringVar()
     lst_ledige_sykler = Listbox(oversikt_ledige_sykler, font=courier, width=50, listvariable=ledige_sykler,yscrollcommand = y_scroll_overskrift.set)
     lst_ledige_sykler.grid(row=2, column=0, columnspan=2, padx=(10,0), pady=1, sticky=E)
+
     # Legger inn listen slik at den vises i listboxen
     ledige_sykler.set(tuple(ledige_sykler_liste))
     y_scroll_overskrift['command'] = lst_ledige_sykler.yview
@@ -1603,15 +1669,19 @@ def ledige_sykler():
 def utleid_no():
     # Åpner markør for henting av data fra database
     oversikt_markor = mindatabase.cursor()
-    oversikt_markor.execute("SELECT utleie.Mobilnr, SykkelID, Etternavn, Utlevert FROM Kunde, Utleie WHERE kunde.Mobilnr=utleie.Mobilnr AND Innlevert IS NULL")
+    oversikt_markor.execute("SELECT utleie.Mobilnr, SykkelID, Etternavn, Utlevert \
+                            FROM Kunde, Utleie \
+                            WHERE kunde.Mobilnr=utleie.Mobilnr \
+                                AND Innlevert IS NULL")
 
-    # Oppretter liste for å bruke i listbox
+    # Oppretter liste for å bruke i listbox og setter antall-variabel til 0
     utleid_no_liste = []
     antall = 0
-
-    # Leser data inn i liste. Trekker fra antall brukte tegn i fornavn
-    # og etternavn fra maks-lengde på post for å plusse på mellomrom i lista
+    
+    # Leser data inn i liste. Trekker fra antall brukte tegn i etternavn,
+    # fra maks-lengde på post for å plusse på mellomrom i lista
     # slik at det blir jevnt og oversiktlig
+    # Øker antall med 1 for hver kunde for å finne totalt antall kunder
     for r in oversikt_markor:
         antall +=1
         mellomrom = ' '
@@ -1650,6 +1720,7 @@ def utleid_no():
     utleid_no = StringVar()
     lst_utleid_no = Listbox(oversikt_utleid_no, font=courier, width=75, listvariable=utleid_no,yscrollcommand = y_scroll_overskrift.set)
     lst_utleid_no.grid(row=2, column=1, padx=(10,0), pady=1, sticky=E)
+
     # Legger inn listen slik at den vises i listboxen
     utleid_no.set(tuple(utleid_no_liste))
     y_scroll_overskrift['command'] = lst_utleid_no.yview
@@ -1694,8 +1765,8 @@ def over_dogn():
         # Oppretter liste for å bruke i listbox
         levert_liste = []
 
-        # Leser data inn i liste. Trekker fra antall brukte tegn i fornavn
-        # og etternavn fra maks-lengde på post for å plusse på mellomrom i lista
+        # Leser data inn i liste. Trekker fra antall brukte tegn i fornavn,
+        # etternavn og utlevert fra maks-lengde på post for å plusse på mellomrom i lista
         # slik at det blir jevnt og oversiktlig
         for r in sorteringsliste:
             utlant = str(r[5])
@@ -1714,10 +1785,11 @@ def over_dogn():
                                   r[3] + mellomrom*mellomrom_mobilnr + \
                                   str(r[4]) + mellomrom*mellomrom_utlevert + \
                                   utlant]
-
+            
+            # Legger liste inn i listeboksen
             utlant_ikke_levert.set(tuple(levert_liste))
 
-        
+        # Lukker markør
         oversikt_markor.close()
 
     def ikke_levert():
@@ -1769,7 +1841,7 @@ def over_dogn():
                                   utlant]
             utlant_ikke_levert.set(tuple(ikke_levert_liste))
 
-        
+        # Lukker markør
         oversikt_markor.close()
 
     # Oppretter vindu
@@ -1780,10 +1852,11 @@ def over_dogn():
     bold = font.Font(size=15, family='Courier New', weight="bold")
     courier = font.Font(size=9, family='Courier New')
 
-    # Oppretter labels som skal være i vinduet
+    # Oppretter labels for overskrift
     lbl_oversikt_ikke_levert = Label(oversikt_ikke_levert, font=bold, text='Sykler som er leid ut over 1 døgn')
     lbl_oversikt_ikke_levert.grid(row=0, column=1, columnspan=2, padx=10, pady=(0,5))
 
+    # Oppretter label for informasjonstekst
     lbl_tekst2 = Label(oversikt_ikke_levert, font=courier, text='Velg med knappene under om du vil se leverte eller ikke-leverte sykler')
     lbl_tekst2.grid(row=1, column=1, padx=(50,0), pady=(0,5))
 
@@ -1792,7 +1865,8 @@ def over_dogn():
     btn_levert.grid(row=2, column=1, padx=(10,120), pady=5)
     btn_ikke_levert = Button(oversikt_ikke_levert, font=courier, width=13, text='Ikke levert', command=ikke_levert)
     btn_ikke_levert.grid(row=2, column=1, padx=(120,10), pady=5)
-    
+
+    # Oppretter labels for listeboks
     lbl_sykkelid = Label(oversikt_ikke_levert, font=courier, text='SykkelID:')
     lbl_sykkelid.grid(row=3, column=1, padx=(9,0), sticky=W)
     lbl_fornavn = Label(oversikt_ikke_levert, font=courier, text='Fornavn:')
@@ -1822,9 +1896,11 @@ def over_dogn():
     btn_avslutt.grid(row=5, column=1, columnspan=2, padx=5, pady=5, sticky=E)
 
 def fullparkert_og_tom():
+    # Oppretter markør og kobler mot database for å finne antall sykler i stativ
     antall_markor = mindatabase.cursor()
     antall_markor.execute("SELECT SykkelStativ.StativID, SykkelStativ.Sted, COUNT(Sykkel.StativID) AS AntallSykler FROM SykkelStativ LEFT JOIN Sykkel ON SykkelStativ.StativID=Sykkel.StativID GROUP BY SykkelStativ.StativID")
 
+    # Oppretter markør og kobler mot database for å finne maks antall sykler som kan stå i stativ
     maks_antall_markor = mindatabase.cursor()
     maks_antall_markor.execute("SELECT *, COUNT(StativID) AS MaksLåser FROM Lås GROUP BY StativID")
     temp = []
@@ -1927,33 +2003,32 @@ def main():
     # Oppretter labels som skal være i hovedvinduet
     lbl_overskrift = Label(mainwindow, font=bold, text='By-sykkel')
     lbl_overskrift.grid(columnspan=5, padx=10, pady=5)
-    
+
+    # Oppretter labels for del-overskrifter
     lbl_admin = Label(mainwindow, font=head, text='Administrasjon')
     lbl_admin.grid(row=1, column=0, columnspan=2, padx=(0,0), pady=10)
     lbl_oversikt = Label(mainwindow, font=head, text='Oversikt')
     lbl_oversikt.grid(row=1, column=3, padx=(00,100), pady=10)
 
+    # Oppretter frames for kolonneoverskrifter
     fra_adm_sykler_overskrift = Frame(mainwindow, borderwidth=2, relief=SUNKEN)
     fra_adm_sykler_overskrift.grid(row=2, column=0, padx=(20,0))
     lbl_adm_sykler_overskrift = Label(fra_adm_sykler_overskrift, font=courier, text='Registrering')
     lbl_adm_sykler_overskrift.grid(padx=39)
-
     fra_endring_overskrift = Frame(mainwindow, borderwidth=2, relief=SUNKEN)
     fra_endring_overskrift.grid(row=2, column=1, padx=(0,40))
     lbl_endring = Label(fra_endring_overskrift, font=courier, text='Flytting/Sletting')
     lbl_endring.grid(padx=22)
-
     fra_kunder_overskrift = Frame(mainwindow, borderwidth=2, relief=SUNKEN)
     fra_kunder_overskrift.grid(row=2, column=2)
     lbl_kunder = Label(fra_kunder_overskrift, font=courier, text='Kunder')
     lbl_kunder.grid(padx=60)
-
     fra_sykler_overskrift = Frame(mainwindow, borderwidth=2, relief=SUNKEN)
     fra_sykler_overskrift.grid(row=2, column=3, columnspan=2, padx=(0,20))
     lbl_sykler = Label(fra_sykler_overskrift, font=courier, text='Sykler')
     lbl_sykler.grid(columnspan=2, padx=146)
 
-    # Oppretter rammer for menyene
+    # Oppretter rammer for menyene som knappene skal legges i
     fra_admin = Frame(mainwindow, borderwidth=1, relief=SUNKEN)
     fra_admin.grid(row=3, column=0, padx=(20,0), sticky=N)
     fra_endring = Frame(mainwindow, borderwidth=1, relief=SUNKEN)
@@ -2009,11 +2084,12 @@ def main():
     btn_fullparkert = Button(fra_sykler, font=courier, width=20, text='Fullparkert stativ', command=fullparkert_og_tom)
     btn_fullparkert.grid(row=3, column=1, padx=10, pady=5)
 
-    btn_avslutt = Button(mainwindow, font=courier, width=10, text='Avslutt', command=mainwindow.destroy)
+    btn_avslutt = Button(mainwindow, font=courier, width=15, height=2, text='Avslutt', command=mainwindow.destroy)
     btn_avslutt.grid(row=4, column=0, columnspan=5, padx=(0,0), pady=10)
 
     mainwindow.mainloop()
-    
+
+# Kaller på main funksjon
 main()
 
 # Stenger databasekoblingen
